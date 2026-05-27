@@ -6,8 +6,9 @@ final class QuotaSnapshotService {
     private let decoderFormatter: ISO8601DateFormatter
     private let fallbackFormatter: ISO8601DateFormatter
     private var cachedSignature: String?
-    private var cachedLogSnapshot: QuotaSnapshot?
+    private var cachedLogSnapshot: SnapshotCandidate?
     private var lastValidSnapshot: QuotaSnapshot?
+    private var lastValidReferenceDate: Date?
 
     init(
         sessionDirectory: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex/sessions"),
@@ -24,12 +25,19 @@ final class QuotaSnapshotService {
     func latestSnapshot(forceReload: Bool = false) -> QuotaSnapshot? {
         if let snapshot = appServerProvider.latestSnapshot() {
             lastValidSnapshot = snapshot
+            lastValidReferenceDate = snapshotDate(snapshot)
             return snapshot
         }
 
-        if let snapshot = latestLogSnapshot(forceReload: forceReload) {
-            lastValidSnapshot = snapshot
-            return snapshot
+        if let candidate = latestLogSnapshot(forceReload: forceReload) {
+            // 日志快照的新旧必须按日志事件时间判断；timestamp 缺失时用文件修改时间兜底，
+            // 不能用 detectedAt，否则旧日志会因为“刚被解析”而覆盖 app-server 的新值。
+            if let lastValidReferenceDate, candidate.referenceDate < lastValidReferenceDate {
+                return lastValidSnapshot
+            }
+            lastValidSnapshot = candidate.snapshot
+            lastValidReferenceDate = candidate.referenceDate
+            return candidate.snapshot
         }
 
         return lastValidSnapshot
@@ -39,7 +47,7 @@ final class QuotaSnapshotService {
         appServerProvider.stop()
     }
 
-    private func latestLogSnapshot(forceReload: Bool = false) -> QuotaSnapshot? {
+    private func latestLogSnapshot(forceReload: Bool = false) -> SnapshotCandidate? {
         let files = newestSessionFiles(limit: 120)
         let signature = files
             .map { "\($0.url.path)::\($0.modifiedAt.timeIntervalSince1970)::\($0.fileSize)" }
@@ -49,7 +57,7 @@ final class QuotaSnapshotService {
             return cachedLogSnapshot
         }
 
-        let snapshot = files
+        let candidate = files
             .map(\.url)
             .compactMap(parseSnapshotWithReferenceDate(from:))
             .max { lhs, rhs in
@@ -57,13 +65,12 @@ final class QuotaSnapshotService {
                     return lhs.fileModifiedAt < rhs.fileModifiedAt
                 }
                 return lhs.referenceDate < rhs.referenceDate
-            }?
-            .snapshot
+            }
 
         cachedSignature = signature
-        if let snapshot {
-            cachedLogSnapshot = snapshot
-            return snapshot
+        if let candidate {
+            cachedLogSnapshot = candidate
+            return candidate
         }
         return cachedLogSnapshot
     }
@@ -186,6 +193,11 @@ final class QuotaSnapshotService {
             return value
         }
         return fallbackFormatter.date(from: raw)
+    }
+
+    /// 统一快照时间口径，日志优先用事件时间，app-server 这类实时数据则使用检测时间。
+    private func snapshotDate(_ snapshot: QuotaSnapshot) -> Date {
+        snapshot.eventTimestamp ?? snapshot.detectedAt
     }
 
     private func windowLabel(minutes: Int) -> String {
