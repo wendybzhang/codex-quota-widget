@@ -130,6 +130,10 @@ final class QuotaSnapshotService {
                 secondary: secondary
             )
 
+            if let resetsAt = snapshot.primary.resetsAt, resetsAt <= Date() {
+                continue
+            }
+
             let candidate = SnapshotCandidate(
                 snapshot: snapshot,
                 referenceDate: timestamp ?? fileModifiedAt,

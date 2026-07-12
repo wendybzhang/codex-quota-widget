@@ -19,8 +19,8 @@ final class CodexAppServerQuotaProvider {
     private var nextRequestID = 1
     private var initialized = false
 
-    init(codexURL: URL = URL(fileURLWithPath: "/Applications/Codex.app/Contents/Resources/codex")) {
-        self.codexURL = codexURL
+    init(codexURL: URL? = nil) {
+        self.codexURL = codexURL ?? Self.discoverCodexURL()
     }
 
     func latestSnapshot(timeout: TimeInterval = 3) -> QuotaSnapshot? {
@@ -30,10 +30,10 @@ final class CodexAppServerQuotaProvider {
             }
 
             if !initialized {
-                guard initialize(timeout: timeout) else {
-                    stopLocked()
-                    return nil
-                }
+                // Recent Codex app-server builds can delay the initialize response until
+                // a later request is sent. Treat initialize as a best-effort handshake
+                // instead of blocking the rate-limit read path on it.
+                _ = initialize(timeout: min(timeout, 0.5))
                 initialized = true
             }
 
@@ -282,5 +282,39 @@ final class CodexAppServerQuotaProvider {
         default:
             return "\(minutes)m"
         }
+    }
+
+    private static func discoverCodexURL() -> URL {
+        let fileManager = FileManager.default
+        for candidate in codexURLCandidates() where fileManager.isExecutableFile(atPath: candidate.path) {
+            return candidate
+        }
+        return URL(fileURLWithPath: "/Applications/Codex.app/Contents/Resources/codex")
+    }
+
+    private static func codexURLCandidates() -> [URL] {
+        var candidates: [URL] = []
+
+        if let overridePath = ProcessInfo.processInfo.environment["CODEX_QUOTA_WIDGET_CODEX_PATH"], !overridePath.isEmpty {
+            candidates.append(URL(fileURLWithPath: overridePath))
+        }
+
+        let applicationDirectories = [
+            URL(fileURLWithPath: "/Applications", isDirectory: true),
+            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications", isDirectory: true),
+        ]
+        let appNames = ["Codex.app", "ChatGPT.app"]
+
+        for directory in applicationDirectories {
+            for appName in appNames {
+                candidates.append(
+                    directory
+                        .appendingPathComponent(appName, isDirectory: true)
+                        .appendingPathComponent("Contents/Resources/codex")
+                )
+            }
+        }
+
+        return candidates
     }
 }
