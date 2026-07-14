@@ -206,6 +206,8 @@ private final class WidgetContentView: NSView {
             let windows = normalizedWindows(from: snapshot)
             let fiveHour = windows.fiveHour
             let sevenDay = windows.sevenDay
+            primarySummaryView.isHidden = fiveHour == nil
+            secondarySummaryView.isHidden = sevenDay == nil
 
             primarySummaryView.render(
                 label: "5h",
@@ -230,25 +232,33 @@ private final class WidgetContentView: NSView {
             } else {
                 fiveHourLabel.stringValue = "5h: 当前日志未提供"
             }
+            fiveHourLabel.isHidden = fiveHour == nil
 
             if let sevenDay {
                 sevenDayLabel.stringValue = "7d: 剩余 \(Int(sevenDay.remainingPercent.rounded()))% · 已用 \(Int(sevenDay.usedPercent.rounded()))%"
             } else {
                 sevenDayLabel.stringValue = "7d: 当前日志未提供"
             }
+            sevenDayLabel.isHidden = sevenDay == nil
 
-            let fiveHourReset = WidgetFormatter.timeUntilReset(fiveHour?.resetsAt)
-            let sevenDayReset = WidgetFormatter.timeUntilReset(sevenDay?.resetsAt)
-            resetLabel.stringValue = "重置: 5h \(fiveHourReset) · 7d \(sevenDayReset)"
-            freshnessLabel.stringValue = "最新日志: \(snapshot.sourceFileName) · \(WidgetFormatter.relativeAge(snapshot.eventTimestamp))"
+            let resetParts = [
+                fiveHour.map { "5h \(WidgetFormatter.timeUntilReset($0.resetsAt))" },
+                sevenDay.map { "7d \(WidgetFormatter.timeUntilReset($0.resetsAt))" },
+            ].compactMap { $0 }
+            resetLabel.stringValue = "重置: \(resetParts.isEmpty ? "--" : resetParts.joined(separator: " · "))"
+            freshnessLabel.stringValue = "数据来源: \(snapshot.sourceFileName) · \(WidgetFormatter.relativeAge(snapshot.eventTimestamp))"
             planLabel.stringValue = "套餐: \(snapshot.planType ?? "unknown")"
         } else {
+            primarySummaryView.isHidden = true
+            secondarySummaryView.isHidden = false
             primarySummaryView.render(label: "5h", remainingPercent: nil, color: WidgetColors.mutedColor)
             secondarySummaryView.render(label: "7d", remainingPercent: nil, color: WidgetColors.mutedColor)
+            fiveHourLabel.isHidden = true
+            sevenDayLabel.isHidden = false
             fiveHourLabel.stringValue = "5h: 等 Codex 写入额度数据"
             sevenDayLabel.stringValue = "7d: 等 Codex 写入额度数据"
             resetLabel.stringValue = "重置: --"
-            freshnessLabel.stringValue = "最新日志: 暂无"
+            freshnessLabel.stringValue = "数据来源: 暂无"
             planLabel.stringValue = "套餐: --"
         }
     }

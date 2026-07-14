@@ -226,8 +226,7 @@ final class CodexAppServerQuotaProvider {
             let rateLimits = codexRateLimits ?? fallbackRateLimits,
             (rateLimits["limitId"] as? String) == "codex",
             let primaryPayload = rateLimits["primary"] as? [String: Any],
-            let primary = parseWindow(primaryPayload),
-            primary.label == "5h"
+            let primary = parseWindow(primaryPayload)
         else {
             return nil
         }

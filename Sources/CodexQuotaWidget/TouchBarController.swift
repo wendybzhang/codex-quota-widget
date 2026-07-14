@@ -133,6 +133,8 @@ private final class TouchBarQuotaView: NSView {
 
     func render(snapshot: QuotaSnapshot?, language: WidgetLanguage) {
         let windows = snapshot.map(normalizedWindows(from:)) ?? (fiveHour: nil, sevenDay: nil)
+        fiveHourRow.isHidden = windows.fiveHour == nil
+        sevenDayRow.isHidden = windows.sevenDay == nil
         fiveHourRow.render(label: "5h", quota: windows.fiveHour, resetStyle: .time, language: language)
         sevenDayRow.render(label: "7D", quota: windows.sevenDay, resetStyle: .date, language: language)
     }
