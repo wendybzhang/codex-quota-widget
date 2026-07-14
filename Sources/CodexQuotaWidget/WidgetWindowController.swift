@@ -49,7 +49,11 @@ final class WidgetWindowController: NSObject, NSWindowDelegate {
     }
 
     func update(snapshot: QuotaSnapshot?) {
+        let sizeBeforeRender = currentSize
         contentView.render(snapshot: snapshot)
+        if !isExpanded && abs(sizeBeforeRender.width - currentSize.width) > 0.5 {
+            applySize()
+        }
     }
 
     func windowDidMove(_ notification: Notification) {
@@ -116,7 +120,9 @@ final class WidgetWindowController: NSObject, NSWindowDelegate {
     }
 
     private var currentSize: NSSize {
-        isExpanded ? NSSize(width: 228, height: 118) : NSSize(width: 154, height: 32)
+        isExpanded
+            ? NSSize(width: WidgetLayout.expandedWidth, height: WidgetLayout.expandedHeight)
+            : NSSize(width: contentView.preferredCollapsedWidth, height: WidgetLayout.collapsedHeight)
     }
 
     private func applySize() {
@@ -158,6 +164,14 @@ final class WidgetWindowController: NSObject, NSWindowDelegate {
     }
 }
 
+private enum WidgetLayout {
+    static let singleQuotaWidth: CGFloat = 92
+    static let dualQuotaWidth: CGFloat = 154
+    static let expandedWidth: CGFloat = 228
+    static let collapsedHeight: CGFloat = 32
+    static let expandedHeight: CGFloat = 118
+}
+
 private final class WidgetContentView: NSView {
     var onToggleExpanded: (() -> Void)?
     var onRequestRefresh: (() -> Void)?
@@ -177,6 +191,7 @@ private final class WidgetContentView: NSView {
     private let resetLabel = NSTextField(labelWithString: "重置: --")
     private let freshnessLabel = NSTextField(labelWithString: "最新日志: --")
     private let planLabel = NSTextField(labelWithString: "套餐: --")
+    private(set) var preferredCollapsedWidth = WidgetLayout.singleQuotaWidth
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -208,6 +223,9 @@ private final class WidgetContentView: NSView {
             let sevenDay = windows.sevenDay
             primarySummaryView.isHidden = fiveHour == nil
             secondarySummaryView.isHidden = sevenDay == nil
+            preferredCollapsedWidth = (fiveHour != nil && sevenDay != nil)
+                ? WidgetLayout.dualQuotaWidth
+                : WidgetLayout.singleQuotaWidth
 
             primarySummaryView.render(
                 label: "5h",
@@ -249,6 +267,7 @@ private final class WidgetContentView: NSView {
             freshnessLabel.stringValue = "数据来源: \(snapshot.sourceFileName) · \(WidgetFormatter.relativeAge(snapshot.eventTimestamp))"
             planLabel.stringValue = "套餐: \(snapshot.planType ?? "unknown")"
         } else {
+            preferredCollapsedWidth = WidgetLayout.singleQuotaWidth
             primarySummaryView.isHidden = true
             secondarySummaryView.isHidden = false
             primarySummaryView.render(label: "5h", remainingPercent: nil, color: WidgetColors.mutedColor)
